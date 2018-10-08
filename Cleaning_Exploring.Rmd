@@ -1,0 +1,99 @@
+---
+title: "Free Wifi Sports"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+There's website called Japan Free Wifi and they have open-data where you can obtain registered wifi spots info! 
+
+https://japanfreewifi.jnto.go.jp/guest/opendata_eng.html
+I've downloaded csv file (snapshot?)
+
+```{r start}
+library(tidyverse)
+library(lubridate)
+library(janitor)
+library(skimr)
+library(hrbrthemes)
+library(scales)
+library(tidytext)
+
+wifi <- read_csv(file="data/JapanFreeWifi_list_20181009_0643.csv")
+
+## Just renaming columns to English
+names(wifi) <- c("spot_id", "operator_id","spotname_jp", "spotname",
+                 "status","registered_dt","approved_dt","update_dt",
+                 "approval_no","category","wifi_area","postal_code",
+                 "prefs","address_jp","address","tel_no",
+                 "hours","ssid", "usage_detail","usage_init",
+                 "lang_support","lang","url","latlng_chr",
+                 "operator","operator_status","operator_postal","operator_prefs",
+                 "operator_addr","operator_dept","contact","contact_no",
+                 "contact_email","how_to_use","other_matters","utilization","login","encryption")
+
+
+
+
+## First 2 digits of postal code = prefecture code?
+wifi <-wifi %>% 
+  mutate(postal_prefix2 = str_sub(as.character(postal_code),1L,2L))
+
+wifi %>% select(latlng_chr) %>% arrange(latlng_chr)
+
+
+## Currently Latitude and Longitude is in same column, separate them
+wifi <- wifi %>%
+  mutate(latlng_chr = str_remove(latlng_chr,"(\\(|\\))")) %>%
+  separate(latlng_chr, c("lat","lng"),sep=",", remove=F) %>%
+  mutate_at(c("lat","lng"), as.double)
+
+###  I'm stuck here for now, I don't know how to convert...
+
+wifi %>% select(lat, lng, spotname, address_jp, prefs) %>%
+  arrange(-lat) %>%
+  head(n=10)
+
+wifi %>% select(lat, lng, spotname, address_jp, prefs) %>%
+  arrange(lat) %>%
+  head(n=10)
+
+
+
+```
+
+
+
+## Wifi Spots by Prefecture
+
+Data contains wifi-spots from 39932 locations from all 47 prefectures in Japan.
+
+```{r prefs}
+
+wifi %>% 
+  ggplot(aes(x=fct_rev(fct_infreq(prefs)))) + 
+  stat_count(aes(fill=fct_infreq(category))) +
+  theme_ipsum_rc(base_family="Osaka") +
+  coord_flip() +
+  labs(title="# of Wifi Spots Registered By Prefecture") 
+
+wifi %>%
+  ggplot(aes(x=floor_date(registered_dt, "year"))) +
+  stat_count() +
+  theme_ipsum_rc(base_family="Osaka")
+
+
+wifi_spot <- wifi %>% select(spotname, prefs, category) %>%
+  unnest_tokens(spot_word, spotname) 
+
+
+wifi_spot %>% count(spot_word, sort=T) %>%
+  filter(n<10000) %>%
+  wordcloud2::wordcloud2()
+
+
+
+```
+
+
+# Wifi Spots in Tokyo
